@@ -1,0 +1,255 @@
+@import "tailwindcss";
+
+/* =============================================================================
+   NEXA Design System
+   Deep slate + electric cyan/teal on dark charcoal
+   Cool stone + teal accents in light mode
+   ============================================================================= */
+
+:root {
+  /* Light — cool stone */
+  --background: #f4f6f8;
+  --foreground: #0f1720;
+  --card: #ffffffcc;
+  --card-foreground: #0f1720;
+  --popover: #fffffff2;
+  --popover-foreground: #0f1720;
+  --primary: #0d9488;
+  --primary-foreground: #f0fdfa;
+  --secondary: #e2e8f0;
+  --secondary-foreground: #1e293b;
+  --muted: #e8eef3;
+  --muted-foreground: #64748b;
+  --accent: #14b8a6;
+  --accent-foreground: #042f2e;
+  --destructive: #dc2626;
+  --destructive-foreground: #fef2f2;
+  --border: #cbd5e1;
+  --input: #cbd5e1;
+  --ring: #14b8a6;
+  --radius: 0.875rem;
+
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-border: rgba(15, 23, 32, 0.08);
+  --glass-shadow: 0 8px 32px rgba(15, 23, 32, 0.08);
+
+  --gradient-hero: radial-gradient(
+      120% 80% at 10% 0%,
+      rgba(20, 184, 166, 0.18),
+      transparent 55%
+    ),
+    radial-gradient(
+      90% 70% at 90% 20%,
+      rgba(15, 118, 110, 0.12),
+      transparent 50%
+    ),
+    linear-gradient(180deg, #f8fafc 0%, #eef2f6 100%);
+
+  --surface-glow: rgba(20, 184, 166, 0.22);
+}
+
+.dark {
+  /* Dark — charcoal + electric cyan/teal */
+  --background: #0b1016;
+  --foreground: #e8eef4;
+  --card: #121a24cc;
+  --card-foreground: #e8eef4;
+  --popover: #121a24f2;
+  --popover-foreground: #e8eef4;
+  --primary: #2dd4bf;
+  --primary-foreground: #042f2e;
+  --secondary: #1a2432;
+  --secondary-foreground: #dbe7f3;
+  --muted: #16202c;
+  --muted-foreground: #94a3b8;
+  --accent: #22d3ee;
+  --accent-foreground: #082f49;
+  --destructive: #f87171;
+  --destructive-foreground: #1c0a0a;
+  --border: #243041;
+  --input: #243041;
+  --ring: #22d3ee;
+
+  --glass-bg: rgba(18, 26, 36, 0.62);
+  --glass-border: rgba(148, 163, 184, 0.12);
+  --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+
+  --gradient-hero: radial-gradient(
+      100% 80% at 15% -10%,
+      rgba(34, 211, 238, 0.16),
+      transparent 55%
+    ),
+    radial-gradient(
+      80% 60% at 90% 10%,
+      rgba(45, 212, 191, 0.12),
+      transparent 50%
+    ),
+    linear-gradient(165deg, #0b1016 0%, #0f1720 45%, #0c141c 100%);
+
+  --surface-glow: rgba(34, 211, 238, 0.2);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply h-full scroll-smooth antialiased;
+  }
+
+  body {
+    @apply min-h-full bg-background text-foreground font-sans;
+    background-image: var(--gradient-hero);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--accent) 35%, transparent);
+    color: var(--foreground);
+  }
+}
+
+@layer utilities {
+  .glass {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  }
+
+  .glass-panel {
+    @apply glass rounded-2xl;
+  }
+
+  .glow-accent {
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 30%, transparent),
+      0 0 40px var(--surface-glow);
+  }
+
+  .text-gradient-accent {
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .bg-grid-faint {
+    background-image: linear-gradient(
+        to right,
+        color-mix(in oklab, var(--border) 55%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        color-mix(in oklab, var(--border) 55%, transparent) 1px,
+        transparent 1px
+      );
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse at center, black 20%, transparent 75%);
+  }
+}
+
+/* Minimal highlight.js github-dark theme (for rehype-highlight) */
+.hljs {
+  color: #e6edf3;
+  background: #0d1117;
+}
+.hljs-comment,
+.hljs-quote {
+  color: #8b949e;
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-addition {
+  color: #ff7b72;
+}
+.hljs-number,
+.hljs-string,
+.hljs-meta .hljs-meta-string,
+.hljs-literal,
+.hljs-doctag,
+.hljs-regexp {
+  color: #a5d6ff;
+}
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: #d2a8ff;
+}
+.hljs-attribute,
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-class .hljs-title,
+.hljs-type {
+  color: #79c0ff;
+}
+.hljs-symbol,
+.hljs-bullet,
+.hljs-subst,
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-link {
+  color: #ffa657;
+}
+.hljs-built_in,
+.hljs-deletion {
+  color: #ffa198;
+}
+.hljs-formula {
+  background: #1f2428;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}
+
+pre code.hljs,
+.prose pre {
+  display: block;
+  overflow-x: auto;
+  padding: 1rem 1.1rem;
+  border-radius: 0.875rem;
+  border: 1px solid var(--border);
+  background: #0d1117;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
