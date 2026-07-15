@@ -85,10 +85,15 @@ NEXA runs without Supabase or AI API keys:
 
 - Missing `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` (or `DEMO_MODE=true`) opens the full UI without login redirects.
 - APIs use an in-memory demo store (`apps/web/src/lib/demo-store.ts`); data resets on process restart.
-- Chat streams a mock reply when no AI provider keys are configured.
+- Chat streams a mock reply when no AI provider keys are configured; the chat UI persists `conversationId` from `X-Conversation-Id`.
+- Notes, knowledge, tasks, automations, email, calendar, and integrations pages call real APIs and fall back to local mock data if a request fails.
 - Integrations use OAuth stubs only — third-party passwords are never accepted.
 
 Demo mode is for local exploration only. Do not use it in production.
+
+## What's next
+
+Core services, automation engine, embeddings, OAuth framework, MFA/passkey APIs, and desktop/mobile scaffolds are in place. Remaining polish: production Redis rate limits, full DB persistence on every path, provider-specific OAuth token refresh, and companion path/permission enforcement end-to-end.
 
 ## Security principles
 

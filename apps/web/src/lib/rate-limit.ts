@@ -1,6 +1,10 @@
 /**
  * Simple in-memory sliding-window rate limiter.
- * Suitable for single-instance / edge prototypes. Use Redis for multi-instance.
+ * Suitable for single-instance / edge prototypes.
+ *
+ * Multi-instance: set REDIS_URL and prefer `rateLimitRedis` from
+ * `rate-limit-redis.ts` (stub today; wire ioredis when ready). Until then,
+ * this memory store is the active path.
  */
 
 export interface RateLimitResult {

@@ -16,6 +16,7 @@ cp .env.example .env.local
 pnpm dev                 # http://localhost:3000
 pnpm typecheck
 pnpm lint
+pnpm --filter @nexa/web test
 pnpm build:web
 ```
 
@@ -31,7 +32,7 @@ Matches the intended build sequence for the monorepo.
 - [x] `packages/shared`, `packages/ai`, `packages/db`
 - [x] `apps/web` Next.js App Router shell
 - [x] `.env.example`, root scripts (`dev`, `db:*`, `build`)
-- [ ] Scaffold `apps/desktop` and `apps/mobile` packages referenced by scripts
+- [x] Scaffold `apps/desktop` and `apps/mobile` packages referenced by scripts
 
 ### Phase 1 — Auth & shell
 
@@ -39,7 +40,7 @@ Matches the intended build sequence for the monorepo.
 - [x] Login / signup / OAuth routes
 - [x] App shell, navigation, theme
 - [x] Demo mode when Supabase unset
-- [ ] Production MFA / WebAuthn enrollment end-to-end
+- [x] MFA enroll/verify + WebAuthn/passkey API routes (enrollment UX continues)
 
 ### Phase 2 — RBAC & security primitives
 
@@ -47,55 +48,57 @@ Matches the intended build sequence for the monorepo.
 - [x] AES-256-GCM encryption helpers
 - [x] Audit logger + `audit_logs` schema
 - [x] Rate limiting + Zod validators
+- [x] Redis-ready rate limit stub (`rate-limit-redis.ts`, `REDIS_URL` in `.env.example`)
 - [ ] Persist audit rows to Postgres on every sensitive action
-- [ ] Redis-backed rate limits for multi-instance
+- [ ] Redis-backed rate limits with ioredis for multi-instance
 
 ### Phase 3 — Chat & multi-provider AI
 
 - [x] `@nexa/ai` providers (OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter)
 - [x] Streaming `POST /api/chat` + mock fallback
-- [x] Conversation UI
+- [x] Conversation UI wired to `/api/chat` with conversationId persistence
+- [x] Agent tools attached on chat when `agentRole` is set
 - [ ] Durable conversation/message persistence to DB in all paths
 
 ### Phase 4 — AI employees
 
 - [x] Twelve agent definitions + guardrails
 - [x] Employees UI + `/api/agents`
-- [ ] Tool runners wired per agent permissions
+- [x] Tool runners wired per agent permissions (`lib/ai/tools.ts`)
 - [ ] Per-workspace agent customization CRUD on DB
 
 ### Phase 5 — Memory & knowledge (pgvector)
 
 - [x] Schema: `memories`, `knowledge_documents`, `knowledge_chunks`
-- [x] Store/search + upload/search API stubs
-- [ ] Embedding pipeline (chunk → embed → upsert)
+- [x] Store/search + upload/search API
+- [x] Embedding pipeline (chunk → embed → upsert) with OpenAI or hash demo path
 - [ ] HNSW/IVFFlat indexes in production
 
 ### Phase 6 — Work modules
 
-- [x] Tasks UI + API (demo store)
-- [x] Notes, calendar, files, email UI surfaces
-- [ ] Full CRUD persistence for notes/calendar/files/email
+- [x] Services layer (tasks, notes, knowledge, memory, automations, conversations, devices)
+- [x] Tasks / notes / calendar / email UI + APIs (demo store fallback)
+- [ ] Full CRUD persistence for notes/calendar/files/email on DB in all paths
 - [ ] Email send path gated by automation approval
 
 ### Phase 7 — Integrations (OAuth only)
 
-- [x] Connect/callback stubs; password rejection
+- [x] Connect/callback OAuth framework; password rejection
 - [x] Integration catalog in `@nexa/shared`
-- [ ] Provider-specific authorize + token exchange
-- [ ] Encrypted credential persistence + refresh
+- [x] Provider configs + demo OAuth when client secrets unset
+- [ ] Encrypted credential persistence + refresh for every provider
 
 ### Phase 8 — Automations
 
 - [x] Automations UI + API + approve endpoint
 - [x] Sensitive action catalog + approval modes
-- [ ] Worker/executor that honors pending_approval
-- [ ] Audit every approve/reject/run
+- [x] Automation engine (`enqueueRun` / `approveRun` / `executeRun`) honors pending_approval
+- [ ] Audit every approve/reject/run in production DB
 
 ### Phase 9 — Devices
 
 - [x] Devices UI + register API with `approvedPaths`
-- [ ] Desktop companion: path sandbox enforcement
+- [ ] Desktop companion: path sandbox enforcement end-to-end
 - [ ] Mobile companion: push + OS permission respect
 - [ ] Never request permission bypasses
 
@@ -159,16 +162,16 @@ Never accept username/password for third-party accounts.
 
 Prefer importing `@nexa/*` over duplicating types across apps.
 
-## Desktop & mobile (planned)
+## Desktop & mobile
 
-Root scripts already reference:
+Root scripts reference:
 
 ```bash
-pnpm desktop:dev   # @nexa/desktop
-pnpm mobile:dev    # @nexa/mobile
+pnpm desktop:dev   # @nexa/desktop (Electron companion scaffold)
+pnpm mobile:dev    # @nexa/mobile (Expo companion scaffold)
 ```
 
-When implementing:
+When extending:
 
 - Desktop: enforce `approvedPaths` on every FS call; audit `desktop.action`.
 - Mobile: use platform permission APIs; audit `mobile.action`.

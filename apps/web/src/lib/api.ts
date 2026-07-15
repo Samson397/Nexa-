@@ -262,7 +262,9 @@ export type RateLimitOptions = {
 
 /**
  * Rate limit by client IP. Returns a NextResponse on exceed, otherwise null.
- * Suitable for single-instance / demo deployments; swap for Redis in prod.
+ * Suitable for single-instance / demo deployments.
+ * Multi-instance: set REDIS_URL and prefer `rateLimitRedis` from
+ * `rate-limit-redis.ts` when ioredis is wired; until then this memory path is active.
  */
 export function rateLimitByIp(
   request: Request,
