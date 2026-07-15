@@ -1,0 +1,51 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build
+.next
+out
+dist
+build
+.turbo
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage
+.nyc_output
+
+# Misc
+*.tsbuildinfo
+.next
+.vercel
+.cache
+
+# Desktop
+apps/desktop/out
+apps/desktop/release
+
+# Mobile
+apps/mobile/.expo
+apps/mobile/android
+apps/mobile/ios
+
+# Uploads / local data
+.tmp
+uploads
+*.pem

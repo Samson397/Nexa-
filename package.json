@@ -1,0 +1,22 @@
+{
+  "name": "nexa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NEXA — AI Operating System",
+  "scripts": {
+    "dev": "pnpm --filter @nexa/web dev",
+    "build": "pnpm -r build",
+    "build:web": "pnpm --filter @nexa/web build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @nexa/db generate",
+    "db:migrate": "pnpm --filter @nexa/db migrate",
+    "db:studio": "pnpm --filter @nexa/db studio",
+    "desktop:dev": "pnpm --filter @nexa/desktop dev",
+    "mobile:dev": "pnpm --filter @nexa/mobile start"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.33.3"
+}
