@@ -1,13 +1,19 @@
 import {
+  getClientIp,
   handleRouteError,
   jsonError,
   jsonOk,
-  newId,
   parseBody,
   rateLimitByIp,
   requireAuth,
 } from "@/lib/api";
-import { demoStore } from "@/lib/demo-store";
+import {
+  approveRun,
+  ensureUserWorkspace,
+  executeRun,
+  listRuns,
+  writeAudit,
+} from "@/lib/services";
 import { approveAutomationSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";
@@ -19,9 +25,8 @@ type RouteContext = {
 /**
  * POST /api/automations/[id]/approve
  *
- * Approves a sensitive automation run. Sensitive actions must not execute
- * until this gate succeeds. Never auto-approve charge_payment / send_email /
- * publish_content without an explicit user call to this endpoint.
+ * Approves a sensitive automation run, then executes it.
+ * Sensitive actions must not run until this gate succeeds.
  */
 export async function POST(request: Request, context: RouteContext) {
   try {
@@ -50,43 +55,69 @@ export async function POST(request: Request, context: RouteContext) {
       body = parsed.data;
     }
 
-    const automation = demoStore.automations().find((a) => a.id === id);
-    if (!automation) {
-      return jsonError("NOT_FOUND", "Automation not found", { status: 404 });
-    }
-
-    const now = new Date().toISOString();
-    let run = automation.pendingRuns.find(
-      (r) => r.id === body.runId || r.status === "pending_approval",
+    const { profileId, workspaceId } = await ensureUserWorkspace(
+      auth.user.id,
+      auth.user.email ?? `${auth.user.id}@nexa.local`,
     );
 
-    if (!run) {
-      run = {
-        id: body.runId ?? newId(),
-        status: "pending_approval",
-        createdAt: now,
-      };
-      automation.pendingRuns.unshift(run);
+    let runId = body.runId;
+    if (!runId) {
+      const { items } = await listRuns({ automationId: id, limit: 20 });
+      const pending = items.find((r) => r.status === "pending_approval");
+      if (!pending) {
+        return jsonError(
+          "NOT_FOUND",
+          "No pending approval run found for this automation",
+          { status: 404 },
+        );
+      }
+      runId = pending.id;
     }
 
-    run.status = "approved";
-    run.approvedAt = now;
-    run.approvedBy = auth.user.id;
-    automation.updatedAt = now;
+    const approved = await approveRun({
+      automationId: id,
+      runId,
+      approvedById: profileId,
+      note: body.note,
+    });
+
+    let executed = approved;
+    if (
+      approved.run.status === "approved" ||
+      approved.run.status === "running"
+    ) {
+      try {
+        executed = await executeRun({ automationId: id, runId });
+      } catch {
+        // Keep approval success even if execute fails mid-flight
+        executed = approved;
+      }
+    }
+
+    await writeAudit({
+      workspaceId,
+      userId: profileId,
+      action: "automation.approve",
+      resourceType: "automation_run",
+      resourceId: runId,
+      ip: getClientIp(request),
+      userAgent: request.headers.get("user-agent") ?? undefined,
+      metadata: {
+        automationId: id,
+        note: body.note,
+        status: executed.run.status,
+      },
+    });
 
     return jsonOk({
       ok: true,
-      demo: true,
-      automationId: automation.id,
-      run: {
-        id: run.id,
-        status: run.status,
-        approvedAt: run.approvedAt,
-        approvedBy: run.approvedBy,
-        note: body.note,
-      },
+      demo: executed.demo,
+      automationId: id,
+      run: executed.run,
       message:
-        "Sensitive automation run approved. Execution would proceed in a wired worker.",
+        executed.run.status === "succeeded"
+          ? "Sensitive automation run approved and executed."
+          : "Sensitive automation run approved.",
     });
   } catch (error) {
     return handleRouteError(error);

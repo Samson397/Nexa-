@@ -1,6 +1,5 @@
 import {
   formatZodError,
-  getClientIp,
   handleRouteError,
   jsonError,
   jsonOk,
@@ -9,20 +8,22 @@ import {
   requireAuth,
 } from "@/lib/api";
 import {
-  createTask,
+  createConversation,
   ensureUserWorkspace,
-  listTasks,
-  writeAudit,
+  listConversations,
 } from "@/lib/services";
-import { createTaskSchema, listTasksQuerySchema } from "@/lib/validators";
+import {
+  createConversationSchema,
+  listConversationsQuerySchema,
+} from "@/lib/validators";
 
 export const runtime = "nodejs";
 
-/** GET /api/tasks — list tasks. */
+/** GET /api/conversations — list conversations for the current user. */
 export async function GET(request: Request) {
   try {
     const limited = rateLimitByIp(request, {
-      name: "tasks-get",
+      name: "conversations-get",
       limit: 120,
       windowMs: 60_000,
     });
@@ -32,13 +33,10 @@ export async function GET(request: Request) {
     if (auth.error) return auth.error;
 
     const { searchParams } = new URL(request.url);
-    const query = listTasksQuerySchema.safeParse({
+    const query = listConversationsQuerySchema.safeParse({
       workspaceId: searchParams.get("workspaceId") ?? undefined,
-      status: searchParams.get("status") ?? undefined,
-      page: searchParams.get("page") ?? undefined,
-      pageSize: searchParams.get("pageSize") ?? undefined,
+      limit: searchParams.get("limit") ?? undefined,
     });
-
     if (!query.success) {
       return jsonError("VALIDATION_ERROR", "Invalid query parameters", {
         status: 400,
@@ -46,39 +44,30 @@ export async function GET(request: Request) {
       });
     }
 
-    const { workspaceId: defaultWs } = await ensureUserWorkspace(
+    const { profileId, workspaceId: defaultWs } = await ensureUserWorkspace(
       auth.user.id,
       auth.user.email ?? `${auth.user.id}@nexa.local`,
     );
     const workspaceId = query.data.workspaceId ?? defaultWs;
-    const { page, pageSize, status } = query.data;
 
-    const { items, total, demo } = await listTasks({
+    const { items, demo } = await listConversations({
       workspaceId,
-      status,
-      page,
-      pageSize,
+      userId: profileId,
+      limit: query.data.limit,
     });
 
-    return jsonOk({
-      items,
-      total,
-      page,
-      pageSize,
-      hasMore: (page - 1) * pageSize + items.length < total,
-      demo,
-    });
+    return jsonOk({ items, total: items.length, demo });
   } catch (error) {
     return handleRouteError(error);
   }
 }
 
-/** POST /api/tasks — create a task. */
+/** POST /api/conversations — create a conversation. */
 export async function POST(request: Request) {
   try {
     const limited = rateLimitByIp(request, {
-      name: "tasks-post",
-      limit: 60,
+      name: "conversations-post",
+      limit: 40,
       windowMs: 60_000,
     });
     if (limited) return limited;
@@ -86,7 +75,7 @@ export async function POST(request: Request) {
     const auth = await requireAuth(request);
     if (auth.error) return auth.error;
 
-    const parsed = await parseBody(request, createTaskSchema);
+    const parsed = await parseBody(request, createConversationSchema);
     if (parsed.error) return parsed.error;
 
     const { profileId, workspaceId: defaultWs } = await ensureUserWorkspace(
@@ -95,30 +84,17 @@ export async function POST(request: Request) {
     );
     const workspaceId = parsed.data.workspaceId ?? defaultWs;
 
-    const { task, demo } = await createTask({
-      workspaceId,
-      createdById: profileId,
-      title: parsed.data.title,
-      description: parsed.data.description,
-      projectId: parsed.data.projectId,
-      status: parsed.data.status,
-      priority: parsed.data.priority,
-      assigneeId: parsed.data.assigneeId,
-      dueDate: parsed.data.dueDate,
-    });
-
-    await writeAudit({
+    const { conversation, demo } = await createConversation({
       workspaceId,
       userId: profileId,
-      action: "settings.update",
-      resourceType: "task",
-      resourceId: task.id,
-      ip: getClientIp(request),
-      userAgent: request.headers.get("user-agent") ?? undefined,
-      metadata: { title: task.title, status: task.status },
+      title: parsed.data.title,
+      agentId: parsed.data.agentId,
+      provider: parsed.data.provider,
+      model: parsed.data.model,
+      metadata: parsed.data.metadata,
     });
 
-    return jsonOk({ ok: true, demo, task }, { status: 201 });
+    return jsonOk({ ok: true, demo, conversation }, { status: 201 });
   } catch (error) {
     return handleRouteError(error);
   }

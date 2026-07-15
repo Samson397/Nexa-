@@ -1,4 +1,11 @@
 import {
+  canExtractPlainText,
+  ensureUserWorkspace,
+  indexDocument,
+  writeAudit,
+} from "@/lib/services";
+import {
+  getClientIp,
   handleRouteError,
   jsonError,
   jsonOk,
@@ -16,9 +23,7 @@ export const runtime = "nodejs";
 const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
 
 /**
- * POST /api/knowledge/upload — multipart file upload stub.
- * Validates allowed types (pdf, docx, xlsx, images, zip, md, code) and
- * returns a pending indexing job. Does not persist file bytes in demo mode.
+ * POST /api/knowledge/upload — multipart upload + index when plain text is extractable.
  */
 export async function POST(request: Request) {
   try {
@@ -80,26 +85,81 @@ export async function POST(request: Request) {
       );
     }
 
-    const jobId = newId();
-    const documentId = newId();
+    const { profileId, workspaceId: defaultWs } = await ensureUserWorkspace(
+      auth.user.id,
+      auth.user.email ?? `${auth.user.id}@nexa.local`,
+    );
+    const formWorkspace = form.get("workspaceId");
+    const workspaceId =
+      typeof formWorkspace === "string" && formWorkspace.length > 0
+        ? formWorkspace
+        : defaultWs;
+
+    const titleField = form.get("title");
+    const title =
+      typeof titleField === "string" && titleField.trim()
+        ? titleField.trim()
+        : file.name;
+
+    let textContent: string | null = null;
+    if (canExtractPlainText(file.name, mime)) {
+      try {
+        textContent = await file.text();
+      } catch {
+        textContent = null;
+      }
+    }
+
+    const storagePath = `uploads/${workspaceId}/${newId()}/${file.name}`;
+    const result = await indexDocument({
+      workspaceId,
+      userId: profileId,
+      title,
+      fileName: file.name,
+      mimeType: mime,
+      storagePath,
+      sizeBytes: file.size,
+      textContent,
+    });
+
+    await writeAudit({
+      workspaceId,
+      userId: profileId,
+      action: "kb.index",
+      resourceType: "knowledge_document",
+      resourceId: result.document.id,
+      ip: getClientIp(request),
+      userAgent: request.headers.get("user-agent") ?? undefined,
+      metadata: {
+        fileName: file.name,
+        mimeType: mime,
+        status: result.document.status,
+        chunkCount: result.document.chunkCount,
+      },
+    });
 
     return jsonOk(
       {
         ok: true,
-        demo: true,
+        demo: result.demo,
         job: {
-          id: jobId,
-          documentId,
-          status: "pending",
-          fileName: file.name,
+          id: newId(),
+          documentId: result.document.id,
+          status: result.document.status,
+          fileName: result.document.fileName,
           mimeType: mime,
           sizeBytes: file.size,
-          createdAt: new Date().toISOString(),
+          chunkCount: result.document.chunkCount,
+          errorMessage: result.document.errorMessage,
+          createdAt: result.document.createdAt,
         },
+        document: result.document,
         message:
-          "Upload accepted. Indexing job is pending (stub — wire object storage + workers for production).",
+          result.document.status === "indexed"
+            ? undefined
+            : "Upload accepted. Binary parsers may need optional deps — metadata stored.",
       },
-      { status: 202 },
+      { status: result.document.status === "indexed" ? 201 : 202 },
     );
   } catch (error) {
     return handleRouteError(error);

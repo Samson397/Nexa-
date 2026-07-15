@@ -86,11 +86,53 @@ export const createTaskSchema = z.object({
   dueDate: z.string().datetime().optional(),
 });
 
+export const updateTaskSchema = z.object({
+  title: z.string().min(1).max(500).optional(),
+  description: z.string().max(10_000).nullable().optional(),
+  projectId: z.string().uuid().nullable().optional(),
+  status: taskStatusSchema.optional(),
+  priority: taskPrioritySchema.optional(),
+  assigneeId: z.string().uuid().nullable().optional(),
+  dueDate: z.string().datetime().nullable().optional(),
+  completedAt: z.string().datetime().nullable().optional(),
+  checklist: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(64),
+        text: z.string().max(500),
+        done: z.boolean(),
+      }),
+    )
+    .max(100)
+    .optional(),
+  sortOrder: z.number().int().optional(),
+});
+
 export const listTasksQuerySchema = z.object({
   workspaceId: z.string().uuid().optional(),
   status: taskStatusSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const createConversationSchema = z.object({
+  title: z.string().min(1).max(500).optional(),
+  workspaceId: z.string().uuid().optional(),
+  agentId: z.string().uuid().optional(),
+  provider: aiProviderSchema.optional(),
+  model: z.string().min(1).max(128).optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+export const listConversationsQuerySchema = z.object({
+  workspaceId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export const runAutomationSchema = z.object({
+  triggerPayload: z.record(z.unknown()).optional(),
+  /** When true (default), execute immediately if the run is already approved. */
+  execute: z.boolean().optional().default(true),
 });
 
 export const sensitiveActionSchema = z.enum(SENSITIVE_AUTOMATION_ACTIONS);

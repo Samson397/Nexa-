@@ -1,12 +1,17 @@
 import {
+  getClientIp,
   handleRouteError,
   jsonOk,
-  newId,
   parseBody,
   rateLimitByIp,
   requireAuth,
 } from "@/lib/api";
-import { demoStore, type DemoDevice } from "@/lib/demo-store";
+import {
+  ensureUserWorkspace,
+  listDevices,
+  registerDevice,
+  writeAudit,
+} from "@/lib/services";
 import { createDeviceSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";
@@ -27,8 +32,14 @@ export async function GET(request: Request) {
     const auth = await requireAuth(request);
     if (auth.error) return auth.error;
 
-    const items = [...demoStore.devices()];
-    return jsonOk({ items, total: items.length, demo: true });
+    const { profileId } = await ensureUserWorkspace(
+      auth.user.id,
+      auth.user.email ?? `${auth.user.id}@nexa.local`,
+    );
+
+    const { items, demo } = await listDevices({ userId: profileId });
+
+    return jsonOk({ items, total: items.length, demo });
   } catch (error) {
     return handleRouteError(error);
   }
@@ -49,27 +60,40 @@ export async function POST(request: Request) {
     const parsed = await parseBody(request, createDeviceSchema);
     if (parsed.error) return parsed.error;
 
-    const now = new Date().toISOString();
-    const device: DemoDevice = {
-      id: newId(),
+    const { profileId, workspaceId } = await ensureUserWorkspace(
+      auth.user.id,
+      auth.user.email ?? `${auth.user.id}@nexa.local`,
+    );
+
+    const { device, demo } = await registerDevice({
+      userId: profileId,
       name: parsed.data.name,
       type: parsed.data.type,
       platform: parsed.data.platform,
-      approvedPaths: parsed.data.approvedPaths ?? [],
-      permissions: parsed.data.permissions ?? [],
+      approvedPaths: parsed.data.approvedPaths,
+      permissions: parsed.data.permissions,
       pushToken: parsed.data.pushToken,
       metadata: parsed.data.metadata,
-      isOnline: true,
-      createdAt: now,
-      updatedAt: now,
-    };
+    });
 
-    demoStore.devices().unshift(device);
+    await writeAudit({
+      workspaceId,
+      userId: profileId,
+      action: "desktop.action",
+      resourceType: "device",
+      resourceId: device.id,
+      ip: getClientIp(request),
+      userAgent: request.headers.get("user-agent") ?? undefined,
+      metadata: {
+        type: device.type,
+        approvedPaths: device.approvedPaths,
+      },
+    });
 
     return jsonOk(
       {
         ok: true,
-        demo: true,
+        demo,
         device,
         message:
           device.type === "desktop"

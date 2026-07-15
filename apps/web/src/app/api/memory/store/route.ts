@@ -1,19 +1,22 @@
 import {
+  getClientIp,
   handleRouteError,
   jsonOk,
-  newId,
   parseBody,
   rateLimitByIp,
   requireAuth,
 } from "@/lib/api";
-import { demoStore } from "@/lib/demo-store";
+import {
+  ensureUserWorkspace,
+  storeMemory,
+  writeAudit,
+} from "@/lib/services";
 import { memoryStoreSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";
 
 /**
- * POST /api/memory/store — persist a long-term memory stub.
- * When PostgreSQL + pgvector is wired, embeddings will be generated server-side.
+ * POST /api/memory/store — persist a long-term memory with embedding.
  */
 export async function POST(request: Request) {
   try {
@@ -30,32 +33,46 @@ export async function POST(request: Request) {
     const parsed = await parseBody(request, memoryStoreSchema);
     if (parsed.error) return parsed.error;
 
-    const now = new Date().toISOString();
-    const memory = {
-      id: newId(),
+    const { profileId, workspaceId: defaultWs } = await ensureUserWorkspace(
+      auth.user.id,
+      auth.user.email ?? `${auth.user.id}@nexa.local`,
+    );
+    const workspaceId = parsed.data.workspaceId ?? defaultWs;
+
+    const memory = await storeMemory({
+      userId: profileId,
+      workspaceId,
       content: parsed.data.content,
-      workspaceId: parsed.data.workspaceId,
       agentId: parsed.data.agentId,
-      importance: parsed.data.importance ?? 0.5,
+      importance: parsed.data.importance,
       source: parsed.data.source,
       metadata: parsed.data.metadata,
-      createdAt: now,
-    };
+    });
 
-    demoStore.memories().unshift(memory);
+    await writeAudit({
+      workspaceId,
+      userId: profileId,
+      action: "settings.update",
+      resourceType: "memory",
+      resourceId: memory.id,
+      ip: getClientIp(request),
+      userAgent: request.headers.get("user-agent") ?? undefined,
+      metadata: { source: parsed.data.source, importance: memory.importance },
+    });
 
     return jsonOk(
       {
         ok: true,
-        demo: true,
+        demo: memory.demo,
         memory: {
           id: memory.id,
           content: memory.content,
           importance: memory.importance,
           createdAt: memory.createdAt,
         },
-        message:
-          "Memory stored in demo store. Connect the database for durable vector memory.",
+        message: memory.demo
+          ? "Memory stored in demo store. Connect the database for durable vector memory."
+          : undefined,
       },
       { status: 201 },
     );

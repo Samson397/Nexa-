@@ -1,13 +1,18 @@
 import { SENSITIVE_AUTOMATION_ACTIONS } from "@nexa/shared";
 import {
+  getClientIp,
   handleRouteError,
   jsonOk,
-  newId,
   parseBody,
   rateLimitByIp,
   requireAuth,
 } from "@/lib/api";
-import { demoStore, type DemoAutomation } from "@/lib/demo-store";
+import {
+  createAutomation,
+  ensureUserWorkspace,
+  listAutomations,
+  writeAudit,
+} from "@/lib/services";
 import { createAutomationSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";
@@ -16,9 +21,8 @@ export const runtime = "nodejs";
  * GET /api/automations — list automations.
  * POST /api/automations — create automation.
  *
- * Security: Sensitive automation actions (send_message, publish_content,
- * modify_data, delete_data, charge_payment, send_email) need approval before
- * runs execute — see /api/automations/[id]/approve.
+ * Security: Sensitive automation actions need approval before runs execute —
+ * see /api/automations/[id]/approve.
  */
 export async function GET(request: Request) {
   try {
@@ -33,17 +37,18 @@ export async function GET(request: Request) {
     if (auth.error) return auth.error;
 
     const { searchParams } = new URL(request.url);
-    const workspaceId = searchParams.get("workspaceId");
+    const { workspaceId: defaultWs } = await ensureUserWorkspace(
+      auth.user.id,
+      auth.user.email ?? `${auth.user.id}@nexa.local`,
+    );
+    const workspaceId = searchParams.get("workspaceId") ?? defaultWs;
 
-    let items = [...demoStore.automations()];
-    if (workspaceId) {
-      items = items.filter((a) => a.workspaceId === workspaceId);
-    }
+    const { items, demo } = await listAutomations({ workspaceId });
 
     return jsonOk({
       items,
       total: items.length,
-      demo: true,
+      demo,
       sensitiveActions: SENSITIVE_AUTOMATION_ACTIONS,
     });
   } catch (error) {
@@ -66,49 +71,46 @@ export async function POST(request: Request) {
     const parsed = await parseBody(request, createAutomationSchema);
     if (parsed.error) return parsed.error;
 
-    const now = new Date().toISOString();
-    const approvalMode = parsed.data.approvalMode ?? "sensitive_only";
-    const inputSteps = parsed.data.steps ?? [];
-    const steps = inputSteps.map((step) => {
-      const isSensitive = (
-        SENSITIVE_AUTOMATION_ACTIONS as readonly string[]
-      ).includes(step.type);
-      return {
+    const { profileId, workspaceId: defaultWs } = await ensureUserWorkspace(
+      auth.user.id,
+      auth.user.email ?? `${auth.user.id}@nexa.local`,
+    );
+    const workspaceId = parsed.data.workspaceId ?? defaultWs;
+
+    const { automation, demo } = await createAutomation({
+      workspaceId,
+      createdById: profileId,
+      name: parsed.data.name,
+      description: parsed.data.description,
+      isEnabled: parsed.data.isEnabled,
+      approvalMode: parsed.data.approvalMode,
+      trigger: parsed.data.trigger,
+      steps: (parsed.data.steps ?? []).map((step) => ({
         id: step.id,
         type: step.type,
         config: step.config ?? {},
-        // Force approval flag for sensitive steps unless approvalMode is never
-        // (still catalogued — runtime gate remains in approve endpoint).
-        requiresApproval:
-          step.requiresApproval ??
-          (approvalMode === "always" ||
-            (approvalMode === "sensitive_only" && isSensitive)),
-      };
+        requiresApproval: step.requiresApproval,
+      })),
     });
 
-    const automation: DemoAutomation = {
-      id: newId(),
-      name: parsed.data.name,
-      description: parsed.data.description,
-      workspaceId: parsed.data.workspaceId,
-      isEnabled: parsed.data.isEnabled ?? true,
-      approvalMode,
-      trigger: {
-        type: parsed.data.trigger.type,
-        config: parsed.data.trigger.config ?? {},
+    await writeAudit({
+      workspaceId,
+      userId: profileId,
+      action: "settings.update",
+      resourceType: "automation",
+      resourceId: automation.id,
+      ip: getClientIp(request),
+      userAgent: request.headers.get("user-agent") ?? undefined,
+      metadata: {
+        name: automation.name,
+        approvalMode: automation.approvalMode,
       },
-      steps,
-      createdAt: now,
-      updatedAt: now,
-      pendingRuns: [],
-    };
-
-    demoStore.automations().unshift(automation);
+    });
 
     return jsonOk(
       {
         ok: true,
-        demo: true,
+        demo,
         automation,
         message:
           "Automation created. Sensitive steps require approval before execution.",
