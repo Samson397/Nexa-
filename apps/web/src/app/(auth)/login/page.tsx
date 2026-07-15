@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Fingerprint, Github } from "lucide-react";
+import { startAuthentication } from "@simplewebauthn/browser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -29,6 +30,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState("avery@nexa.ai");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [passkeyError, setPasskeyError] = useState<string | null>(null);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -36,6 +39,58 @@ export default function LoginPage() {
     await loginWithPassword(email, password);
     setLoading(false);
     router.push("/dashboard");
+  }
+
+  async function signInWithPasskey() {
+    setPasskeyBusy(true);
+    setPasskeyError(null);
+    try {
+      const optRes = await fetch("/api/auth/passkey/login-options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const optData = (await optRes.json()) as {
+        ok?: boolean;
+        options?: Parameters<typeof startAuthentication>[0]["optionsJSON"];
+        error?: { message?: string };
+      };
+      if (!optRes.ok || !optData.options) {
+        setPasskeyError(
+          optData.error?.message ?? "Unable to start passkey sign-in",
+        );
+        return;
+      }
+
+      const assertion = await startAuthentication({
+        optionsJSON: optData.options,
+      });
+
+      const verifyRes = await fetch("/api/auth/passkey/login-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response: assertion }),
+      });
+      const verifyData = (await verifyRes.json()) as {
+        ok?: boolean;
+        verified?: boolean;
+        error?: { message?: string };
+      };
+      if (!verifyRes.ok || !verifyData.verified) {
+        setPasskeyError(
+          verifyData.error?.message ?? "Passkey sign-in failed",
+        );
+        return;
+      }
+
+      router.push("/dashboard");
+    } catch (err) {
+      setPasskeyError(
+        err instanceof Error ? err.message : "Passkey sign-in cancelled",
+      );
+    } finally {
+      setPasskeyBusy(false);
+    }
   }
 
   return (
@@ -124,11 +179,15 @@ export default function LoginPage() {
           variant="soft"
           className="w-full justify-start"
           type="button"
-          onClick={() => router.push("/dashboard")}
+          disabled={passkeyBusy}
+          onClick={() => void signInWithPasskey()}
         >
           <Fingerprint />
-          Sign in with passkey
+          {passkeyBusy ? "Waiting for passkey…" : "Sign in with passkey"}
         </Button>
+        {passkeyError ? (
+          <p className="text-xs text-destructive">{passkeyError}</p>
+        ) : null}
       </div>
 
       <p className="mt-6 text-center text-sm text-muted-foreground">

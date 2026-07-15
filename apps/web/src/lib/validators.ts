@@ -146,6 +146,53 @@ export const connectIntegrationSchema = z
     { message: "Third-party passwords are never accepted" },
   );
 
+export const mfaVerifySchema = z.object({
+  factorId: z.string().min(1).max(128),
+  code: z.string().min(4).max(12),
+});
+
+export const passkeyVerifySchema = z.object({
+  response: z.record(z.unknown()),
+  userId: z.string().min(1).max(128).optional(),
+  name: z.string().max(200).optional(),
+});
+
+export const createNoteSchema = z.object({
+  title: z.string().min(1).max(500),
+  content: z.record(z.unknown()).optional(),
+  plainText: z.string().max(200_000).optional(),
+  tags: z.array(z.string().max(64)).max(50).optional(),
+  workspaceId: z.string().uuid().optional(),
+  folderId: z.string().uuid().optional(),
+});
+
+export const updateNoteSchema = z.object({
+  title: z.string().min(1).max(500).optional(),
+  content: z.record(z.unknown()).optional(),
+  plainText: z.string().max(200_000).optional(),
+  tags: z.array(z.string().max(64)).max(50).optional(),
+  folderId: z.string().uuid().nullable().optional(),
+});
+
+export const createCalendarEventSchema = z.object({
+  title: z.string().min(1).max(500),
+  description: z.string().max(10_000).optional(),
+  location: z.string().max(500).optional(),
+  startAt: z.string().datetime(),
+  endAt: z.string().datetime(),
+  allDay: z.boolean().optional(),
+  workspaceId: z.string().uuid().optional(),
+});
+
+export const emailDraftSchema = z.object({
+  to: z.array(z.string().email()).min(1).max(50),
+  subject: z.string().min(1).max(998),
+  body: z.string().max(200_000).default(""),
+  /** Explicit approval required before any send path executes. */
+  approvedToSend: z.boolean().optional().default(false),
+  provider: z.enum(["gmail", "outlook"]).optional(),
+});
+
 export const deviceTypeSchema = z.enum(["web", "desktop", "ios", "android"]);
 
 export const createDeviceSchema = z.object({

@@ -156,12 +156,39 @@ export async function requireAuth(
     return { user: { id: "demo-user", email: "demo@nexa.local" } };
   }
 
+  // Passkey / demo session cookie set by login-verify or login/signup stubs
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  const sessionMatch = cookieHeader.match(/(?:^|;\s*)nexa-session=([^;]+)/);
+  const sessionToken = sessionMatch?.[1]
+    ? decodeURIComponent(sessionMatch[1])
+    : null;
+
+  if (sessionToken?.startsWith("demo.")) {
+    try {
+      const payload = JSON.parse(
+        Buffer.from(sessionToken.slice(5), "base64url").toString("utf8"),
+      ) as { id?: string; email?: string };
+      if (payload.id) {
+        return {
+          user: {
+            id: payload.id,
+            email: payload.email ?? `${payload.id}@demo.nexa.local`,
+          },
+        };
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  const tokenForSupabase = bearer || (sessionToken && !sessionToken.startsWith("demo.") ? sessionToken : null);
+
   if (hasSupabaseEnv()) {
     try {
       const { createClient } = await import("@/lib/supabase/server");
       const supabase = await createClient();
-      if (bearer) {
-        const { data, error } = await supabase.auth.getUser(bearer);
+      if (tokenForSupabase) {
+        const { data, error } = await supabase.auth.getUser(tokenForSupabase);
         if (error || !data.user) {
           return {
             error: jsonError("UNAUTHORIZED", "Invalid or expired session", {
