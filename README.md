@@ -10,8 +10,8 @@ NEXA is built toward **TWEEN**: an extensible AI OS vision where agents, tools, 
 nexa/
 ├── apps/
 │   ├── web/          # Next.js product UI + API routes (primary app)
-│   ├── desktop/      # Desktop companion (planned; path-sandboxed local bridge)
-│   └── mobile/       # Mobile companion (planned; Expo)
+│   ├── desktop/      # Electron companion (path-sandboxed local bridge)
+│   └── mobile/       # Expo iOS/Android companion
 ├── packages/
 │   ├── ai/           # @nexa/ai — providers, agent definitions
 │   ├── db/           # @nexa/db — Drizzle schema, migrations, client
