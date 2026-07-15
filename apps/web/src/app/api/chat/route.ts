@@ -188,7 +188,7 @@ export async function POST(request: Request) {
           metadata: { role: "assistant", length: text.length },
         });
 
-        if (lastUser && shouldStoreMemory(lastUser.content, text)) {
+        if (lastUser && shouldStoreMemory(lastUser.content)) {
           await storeMemory({
             userId: profileId,
             workspaceId,
@@ -258,7 +258,7 @@ function deriveTitle(
   return oneLine.length > 72 ? `${oneLine.slice(0, 71)}…` : oneLine;
 }
 
-function shouldStoreMemory(userText: string, _assistantText: string): boolean {
+function shouldStoreMemory(userText: string): boolean {
   return /remember (that|this|to)|my preference|always remember|don't forget|i (prefer|like|hate|always|never)/i.test(
     userText,
   );

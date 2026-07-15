@@ -124,7 +124,7 @@ export async function POST(request: Request) {
       email: `${passkey.userId}@passkey.nexa.local`,
     };
 
-    let supabaseSession: {
+    const supabaseSession: {
       access_token: string;
       refresh_token: string;
       expires_at?: number;

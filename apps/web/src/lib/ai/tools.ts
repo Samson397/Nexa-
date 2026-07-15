@@ -260,7 +260,6 @@ export function buildAgentTools(
   for (const name of Object.keys(all) as AgentToolName[]) {
     const required = TOOL_PERMISSIONS[name] ?? [];
     if (hasPermission(ctx.permissions, required)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (selected as Record<string, unknown>)[name] = all[name];
     }
   }

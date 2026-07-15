@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import {
   ChatInterface,
@@ -25,7 +25,10 @@ export default function ChatConversationPage({
   );
   const [streaming, setStreaming] = useState(false);
   const conversationIdRef = useRef(conversationId);
-  conversationIdRef.current = conversationId;
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   async function handleSend(content: string) {
     const userMsg: ChatMessage = {
