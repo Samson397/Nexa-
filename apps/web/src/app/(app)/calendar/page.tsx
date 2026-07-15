@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,12 +12,21 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { apiJson } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 const hours = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
 const weekDays = ["Mon 13", "Tue 14", "Wed 15", "Thu 16", "Fri 17"];
 
-const events = [
+type CalEvent = {
+  day: number;
+  start: string;
+  end: string;
+  title: string;
+  source: string;
+};
+
+const MOCK_EVENTS: CalEvent[] = [
   {
     day: 2,
     start: "10:00",
@@ -48,8 +57,73 @@ const events = [
   },
 ];
 
+function hourLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "09:00";
+  return `${String(d.getHours()).padStart(2, "0")}:00`;
+}
+
+function endLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "10:00";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function dayIndex(iso: string): number {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 2;
+  // Map JS Sunday=0 … to Mon=0 … Fri=4 (clamp)
+  const js = d.getDay();
+  const monBased = js === 0 ? 6 : js - 1;
+  return Math.min(4, Math.max(0, monBased));
+}
+
 export default function CalendarPage() {
   const [view, setView] = useState("week");
+  const [events, setEvents] = useState<CalEvent[]>(MOCK_EVENTS);
+  const [source, setSource] = useState("Google · Outlook · Apple");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiJson<{
+          items: Array<{
+            id: string;
+            title: string;
+            startAt: string;
+            endAt: string;
+            externalProvider?: string | null;
+            location?: string | null;
+          }>;
+          source?: string;
+        }>("/api/calendar");
+        if (cancelled || !data.items?.length) return;
+        setEvents(
+          data.items.map((e) => ({
+            day: dayIndex(e.startAt),
+            start: hourLabel(e.startAt),
+            end: endLabel(e.endAt),
+            title: e.title,
+            source: e.externalProvider
+              ? String(e.externalProvider).replaceAll("_", " ")
+              : "NEXA",
+          })),
+        );
+        setSource(data.source ?? "calendar");
+      } catch {
+        // keep mocks
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const dayEvents = useMemo(
+    () => events.filter((event) => event.day === 2),
+    [events],
+  );
 
   return (
     <div className="space-y-6">
@@ -85,7 +159,7 @@ export default function CalendarPage() {
           <Card className="overflow-hidden">
             <CardHeader>
               <CardTitle>Week of Jul 13</CardTitle>
-              <CardDescription>Google · Outlook · Apple</CardDescription>
+              <CardDescription>{source}</CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <div className="min-w-[720px]">
@@ -112,13 +186,14 @@ export default function CalendarPage() {
                       <div className="pt-2 text-xs text-muted-foreground">
                         {hour}
                       </div>
-                      {weekDays.map((_, dayIndex) => {
+                      {weekDays.map((_, dayIndexNum) => {
                         const event = events.find(
-                          (item) => item.day === dayIndex && item.start === hour,
+                          (item) =>
+                            item.day === dayIndexNum && item.start === hour,
                         );
                         return (
                           <div
-                            key={`${dayIndex}-${hour}`}
+                            key={`${dayIndexNum}-${hour}`}
                             className="min-h-14 rounded-xl border border-border/50 bg-muted/20 p-1"
                           >
                             {event ? (
@@ -150,25 +225,25 @@ export default function CalendarPage() {
           <Card>
             <CardHeader>
               <CardTitle>Wednesday, Jul 15</CardTitle>
-              <CardDescription>3 meetings · 2 focus blocks free</CardDescription>
+              <CardDescription>
+                {dayEvents.length} meetings · focus blocks free
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {events
-                .filter((event) => event.day === 2)
-                .map((event) => (
-                  <div
-                    key={event.title}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3"
-                  >
-                    <div>
-                      <p className="font-medium">{event.title}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {event.start} – {event.end}
-                      </p>
-                    </div>
-                    <Badge>{event.source}</Badge>
+              {dayEvents.map((event) => (
+                <div
+                  key={`${event.title}-${event.start}`}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3"
+                >
+                  <div>
+                    <p className="font-medium">{event.title}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {event.start} – {event.end}
+                    </p>
                   </div>
-                ))}
+                  <Badge>{event.source}</Badge>
+                </div>
+              ))}
             </CardContent>
           </Card>
         </TabsContent>

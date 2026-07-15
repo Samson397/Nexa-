@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   GitBranch,
@@ -18,21 +19,34 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { apiJson } from "@/lib/api-client";
 
-const workflows = [
+type Workflow = {
+  id: string;
+  name: string;
+  status: string;
+  runs: number;
+  approvals: string;
+  pendingRunId?: string;
+};
+
+const MOCK_WORKFLOWS: Workflow[] = [
   {
+    id: "w1",
     name: "Invoice chase (approved send)",
     status: "active",
     runs: 128,
     approvals: "always",
   },
   {
+    id: "w2",
     name: "Renewal risk briefing",
     status: "active",
     runs: 42,
     approvals: "sensitive_only",
   },
   {
+    id: "w3",
     name: "Social draft → LinkedIn",
     status: "paused",
     runs: 19,
@@ -85,6 +99,74 @@ const nodes = [
 ];
 
 export default function AutomationsPage() {
+  const [workflows, setWorkflows] = useState<Workflow[]>(MOCK_WORKFLOWS);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiJson<{
+          items: Array<{
+            id: string;
+            name: string;
+            isEnabled: boolean;
+            approvalMode: string;
+            pendingRuns?: Array<{ id: string; status: string }>;
+          }>;
+        }>("/api/automations");
+        if (cancelled || !data.items?.length) return;
+        setWorkflows(
+          data.items.map((a) => {
+            const pending = a.pendingRuns?.find(
+              (r) => r.status === "pending_approval",
+            );
+            return {
+              id: a.id,
+              name: a.name,
+              status: a.isEnabled ? "active" : "paused",
+              runs: a.pendingRuns?.length ?? 0,
+              approvals: a.approvalMode,
+              pendingRunId: pending?.id,
+            };
+          }),
+        );
+      } catch {
+        // keep mocks
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function approve(workflow: Workflow) {
+    setApprovingId(workflow.id);
+    setMessage(null);
+    try {
+      const data = await apiJson<{ message?: string; run?: { status: string } }>(
+        `/api/automations/${workflow.id}/approve`,
+        {
+          method: "POST",
+          body: JSON.stringify(
+            workflow.pendingRunId ? { runId: workflow.pendingRunId } : {},
+          ),
+        },
+      );
+      setMessage(data.message ?? `Run ${data.run?.status ?? "approved"}`);
+      setWorkflows((prev) =>
+        prev.map((w) =>
+          w.id === workflow.id ? { ...w, pendingRunId: undefined } : w,
+        ),
+      );
+    } catch {
+      setMessage("No pending approval run (demo). Wire a run first.");
+    } finally {
+      setApprovingId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -103,10 +185,16 @@ export default function AutomationsPage() {
         </Button>
       </div>
 
+      {message ? (
+        <div className="rounded-2xl border border-accent/30 bg-accent-soft px-4 py-3 text-sm text-accent">
+          {message}
+        </div>
+      ) : null}
+
       <div className="grid gap-3 md:grid-cols-3">
         {workflows.map((workflow, index) => (
           <motion.div
-            key={workflow.name}
+            key={workflow.id}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
@@ -127,6 +215,20 @@ export default function AutomationsPage() {
                   {workflow.runs} runs · approval {workflow.approvals}
                 </CardDescription>
               </CardHeader>
+              <CardContent>
+                <Button
+                  size="sm"
+                  variant={workflow.pendingRunId ? "default" : "outline"}
+                  disabled={approvingId === workflow.id}
+                  onClick={() => void approve(workflow)}
+                >
+                  {approvingId === workflow.id
+                    ? "Approving…"
+                    : workflow.pendingRunId
+                      ? "Approve pending run"
+                      : "Approve"}
+                </Button>
+              </CardContent>
             </Card>
           </motion.div>
         ))}

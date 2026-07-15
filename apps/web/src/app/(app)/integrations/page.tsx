@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { apiJson } from "@/lib/api-client";
 
 const LABELS: Record<IntegrationProvider, string> = {
   github: "GitHub",
@@ -76,14 +77,38 @@ const DISPLAY_ORDER: (keyof typeof INTEGRATION_CATEGORIES)[] = [
 
 export default function IntegrationsPage() {
   const [connected, setConnected] = useState(CONNECTED);
+  const [busy, setBusy] = useState<IntegrationProvider | null>(null);
 
-  function toggle(provider: IntegrationProvider) {
-    setConnected((prev) => {
-      const next = new Set(prev);
-      if (next.has(provider)) next.delete(provider);
-      else next.add(provider);
-      return next;
-    });
+  async function connect(provider: IntegrationProvider) {
+    if (connected.has(provider)) {
+      setConnected((prev) => {
+        const next = new Set(prev);
+        next.delete(provider);
+        return next;
+      });
+      return;
+    }
+
+    setBusy(provider);
+    try {
+      const data = await apiJson<{
+        oauthUrl?: string;
+        demo?: boolean;
+      }>("/api/integrations/connect", {
+        method: "POST",
+        body: JSON.stringify({ provider }),
+      });
+      if (data.oauthUrl) {
+        window.location.assign(data.oauthUrl);
+        return;
+      }
+      setConnected((prev) => new Set(prev).add(provider));
+    } catch {
+      // Graceful mock toggle when API is unavailable
+      setConnected((prev) => new Set(prev).add(provider));
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -133,9 +158,14 @@ export default function IntegrationsPage() {
                       <Button
                         className="w-full"
                         variant={isConnected ? "outline" : "default"}
-                        onClick={() => toggle(provider)}
+                        disabled={busy === provider}
+                        onClick={() => void connect(provider)}
                       >
-                        {isConnected ? "Disconnect" : "Connect"}
+                        {busy === provider
+                          ? "Connecting…"
+                          : isConnected
+                            ? "Disconnect"
+                            : "Connect"}
                       </Button>
                     </CardContent>
                   </Card>

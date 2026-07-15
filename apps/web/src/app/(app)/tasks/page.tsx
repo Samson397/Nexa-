@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { apiJson } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 const projects = [
@@ -23,68 +24,72 @@ const projects = [
 
 type Priority = "low" | "medium" | "high" | "urgent";
 
-const columns = [
+type TaskCard = {
+  id: string;
+  title: string;
+  priority: Priority;
+  due: string;
+  project: string;
+  status: string;
+};
+
+const MOCK_TASKS: TaskCard[] = [
   {
-    id: "todo",
-    title: "To do",
-    tasks: [
-      {
-        title: "Map approval gates for invoice chase",
-        priority: "high" as Priority,
-        due: "Jul 16",
-        project: "Ops OS Launch",
-      },
-      {
-        title: "Collect brand assets for social draft",
-        priority: "medium" as Priority,
-        due: "Jul 17",
-        project: "Knowledge v2",
-      },
-    ],
+    id: "t1",
+    title: "Map approval gates for invoice chase",
+    priority: "high",
+    due: "Jul 16",
+    project: "Ops OS Launch",
+    status: "todo",
   },
   {
-    id: "in_progress",
-    title: "In progress",
-    tasks: [
-      {
-        title: "Draft Helix counter proposal",
-        priority: "urgent" as Priority,
-        due: "Today",
-        project: "Helix Renewal",
-      },
-      {
-        title: "Index Ops Playbook for Support",
-        priority: "high" as Priority,
-        due: "Jul 15",
-        project: "Knowledge v2",
-      },
-    ],
+    id: "t2",
+    title: "Collect brand assets for social draft",
+    priority: "medium",
+    due: "Jul 17",
+    project: "Knowledge v2",
+    status: "todo",
   },
   {
-    id: "review",
-    title: "Review",
-    tasks: [
-      {
-        title: "Legal risk note on OEM clause",
-        priority: "medium" as Priority,
-        due: "Jul 18",
-        project: "Helix Renewal",
-      },
-    ],
+    id: "t3",
+    title: "Draft Helix counter proposal",
+    priority: "urgent",
+    due: "Today",
+    project: "Helix Renewal",
+    status: "in_progress",
   },
   {
-    id: "done",
-    title: "Done",
-    tasks: [
-      {
-        title: "Connect Outlook calendar",
-        priority: "low" as Priority,
-        due: "Jul 14",
-        project: "Ops OS Launch",
-      },
-    ],
+    id: "t4",
+    title: "Index Ops Playbook for Support",
+    priority: "high",
+    due: "Jul 15",
+    project: "Knowledge v2",
+    status: "in_progress",
+  },
+  {
+    id: "t5",
+    title: "Legal risk note on OEM clause",
+    priority: "medium",
+    due: "Jul 18",
+    project: "Helix Renewal",
+    status: "review",
+  },
+  {
+    id: "t6",
+    title: "Connect Outlook calendar",
+    priority: "low",
+    due: "Jul 14",
+    project: "Ops OS Launch",
+    status: "done",
   },
 ];
+
+const COLUMN_META = [
+  { id: "todo", title: "To do" },
+  { id: "in_progress", title: "In progress" },
+  { id: "review", title: "Review" },
+  { id: "done", title: "Done" },
+] as const;
 
 const priorityVariant = {
   low: "secondary",
@@ -93,8 +98,115 @@ const priorityVariant = {
   urgent: "danger",
 } as const;
 
+function formatDue(dueDate?: string | null): string {
+  if (!dueDate) return "No due date";
+  const d = new Date(dueDate);
+  if (Number.isNaN(d.getTime())) return dueDate;
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return "Today";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function normalizePriority(p?: string): Priority {
+  if (p === "low" || p === "medium" || p === "high" || p === "urgent") return p;
+  return "medium";
+}
+
 export default function TasksPage() {
   const [view, setView] = useState("board");
+  const [tasks, setTasks] = useState<TaskCard[]>(MOCK_TASKS);
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiJson<{
+          items: Array<{
+            id: string;
+            title: string;
+            status: string;
+            priority?: string;
+            dueDate?: string | null;
+            projectId?: string | null;
+          }>;
+        }>("/api/tasks");
+        if (cancelled || !data.items?.length) return;
+        setTasks(
+          data.items.map((t) => ({
+            id: t.id,
+            title: t.title,
+            status: t.status || "todo",
+            priority: normalizePriority(t.priority),
+            due: formatDue(t.dueDate),
+            project: t.projectId ? "Project" : "General",
+          })),
+        );
+      } catch {
+        // keep mocks
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const columns = useMemo(
+    () =>
+      COLUMN_META.map((col) => ({
+        ...col,
+        tasks: tasks.filter((t) => t.status === col.id),
+      })),
+    [tasks],
+  );
+
+  async function createTask() {
+    setCreating(true);
+    const title = "New task from NEXA";
+    try {
+      const data = await apiJson<{
+        task: {
+          id: string;
+          title: string;
+          status: string;
+          priority?: string;
+          dueDate?: string | null;
+        };
+      }>("/api/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          title,
+          status: "todo",
+          priority: "medium",
+        }),
+      });
+      setTasks((prev) => [
+        {
+          id: data.task.id,
+          title: data.task.title,
+          status: data.task.status || "todo",
+          priority: normalizePriority(data.task.priority),
+          due: formatDue(data.task.dueDate),
+          project: "General",
+        },
+        ...prev,
+      ]);
+    } catch {
+      setTasks((prev) => [
+        {
+          id: `local-${Date.now()}`,
+          title,
+          status: "todo",
+          priority: "medium",
+          due: "No due date",
+          project: "General",
+        },
+        ...prev,
+      ]);
+    } finally {
+      setCreating(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -107,9 +219,9 @@ export default function TasksPage() {
             Projects and execution boards with priorities and deadlines.
           </p>
         </div>
-        <Button>
+        <Button disabled={creating} onClick={() => void createTask()}>
           <Plus />
-          New task
+          {creating ? "Creating…" : "New task"}
         </Button>
       </div>
 
@@ -158,7 +270,7 @@ export default function TasksPage() {
                 </div>
                 <div className="space-y-3">
                   {column.tasks.map((task) => (
-                    <Card key={task.title} className="hover:border-accent/30">
+                    <Card key={task.id} className="hover:border-accent/30">
                       <CardContent className="space-y-3 p-4">
                         <p className="text-sm font-medium">{task.title}</p>
                         <div className="flex flex-wrap items-center gap-2">
@@ -186,7 +298,7 @@ export default function TasksPage() {
               {columns.flatMap((column) =>
                 column.tasks.map((task) => (
                   <div
-                    key={`${column.id}-${task.title}`}
+                    key={`${column.id}-${task.id}`}
                     className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -15,9 +15,20 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { apiJson } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
-const inbox = [
+type EmailItem = {
+  id: string;
+  from: string;
+  subject: string;
+  preview: string;
+  time: string;
+  priority: boolean;
+  body: string;
+};
+
+const MOCK_INBOX: EmailItem[] = [
   {
     id: "e1",
     from: "Maya Chen · Helix Labs",
@@ -56,11 +67,96 @@ const inbox = [
   },
 ];
 
+function relativeTime(iso?: string): string {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "";
+  const diff = Date.now() - t;
+  const m = Math.floor(diff / 60_000);
+  if (m < 60) return `${Math.max(1, m)}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return "Yesterday";
+}
+
 export default function EmailPage() {
-  const [activeId, setActiveId] = useState(inbox[0].id);
+  const [inbox, setInbox] = useState<EmailItem[]>(MOCK_INBOX);
+  const [activeId, setActiveId] = useState(MOCK_INBOX[0]!.id);
   const [reply, setReply] = useState("");
   const [summary, setSummary] = useState<string | null>(null);
-  const active = inbox.find((item) => item.id === activeId) ?? inbox[0];
+  const [drafting, setDrafting] = useState(false);
+  const [providerLabel, setProviderLabel] = useState("Gmail · demo data");
+  const active = inbox.find((item) => item.id === activeId) ?? inbox[0]!;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiJson<{
+          items: Array<{
+            id: string;
+            from: string;
+            subject: string;
+            snippet?: string;
+            createdAt?: string;
+            body?: string;
+            isDraft?: boolean;
+          }>;
+          provider?: string | null;
+          mock?: boolean;
+        }>("/api/email");
+        if (cancelled || !data.items?.length) return;
+        const mapped = data.items.map((m, i) => ({
+          id: m.id,
+          from: m.from || "Unknown",
+          subject: m.subject || "(no subject)",
+          preview: m.snippet || "",
+          time: relativeTime(m.createdAt) || `${i + 1}h`,
+          priority: i < 2,
+          body: m.body || m.snippet || "",
+        }));
+        setInbox(mapped);
+        setActiveId(mapped[0]!.id);
+        setProviderLabel(
+          data.mock
+            ? `${data.provider ?? "Inbox"} · demo data`
+            : `${data.provider ?? "Inbox"} · live`,
+        );
+      } catch {
+        // keep mocks
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function draftReply() {
+    setDrafting(true);
+    try {
+      const data = await apiJson<{
+        draft: { subject: string; to: string[] };
+        message?: string;
+      }>("/api/email/draft", {
+        method: "POST",
+        body: JSON.stringify({
+          to: ["reply@example.com"],
+          subject: `Re: ${active.subject}`,
+          body: `Thanks for your note on "${active.subject}". I'll follow up with next steps today.`,
+          provider: "gmail",
+        }),
+      });
+      setReply(
+        `Thanks for your note on "${active.subject}". I'll follow up with next steps today.\n\n(Draft saved${data.draft ? ` · ${data.draft.subject}` : ""})`,
+      );
+    } catch {
+      setReply(
+        "Thanks Maya — happy to explore 180 seats. I'll share a revised quote today and flag OEM language for Legal before our call.",
+      );
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -85,7 +181,7 @@ export default function EmailPage() {
             variant="soft"
             onClick={() =>
               setSummary(
-                "Inbox summary: 2 renewal threads need replies today; 1 finance export to triage; low-priority digests can wait.",
+                `Inbox summary: ${inbox.length} threads loaded; prioritize replies on flagged items first.`,
               )
             }
           >
@@ -109,7 +205,7 @@ export default function EmailPage() {
         <Card className="overflow-hidden">
           <CardHeader>
             <CardTitle>Inbox</CardTitle>
-            <CardDescription>Gmail · demo data</CardDescription>
+            <CardDescription>{providerLabel}</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[560px]">
@@ -169,14 +265,11 @@ export default function EmailPage() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() =>
-                    setReply(
-                      "Thanks Maya — happy to explore 180 seats. I'll share a revised quote today and flag OEM language for Legal before our call.",
-                    )
-                  }
+                  disabled={drafting}
+                  onClick={() => void draftReply()}
                 >
                   <Sparkles className="h-3.5 w-3.5" />
-                  AI draft
+                  {drafting ? "Drafting…" : "AI draft"}
                 </Button>
               </div>
               <Textarea
@@ -186,7 +279,13 @@ export default function EmailPage() {
                 className="min-h-[140px]"
               />
               <div className="flex justify-end gap-2">
-                <Button variant="outline">Save draft</Button>
+                <Button
+                  variant="outline"
+                  onClick={() => void draftReply()}
+                  disabled={drafting}
+                >
+                  Save draft
+                </Button>
                 <Button>Send (approval)</Button>
               </div>
             </div>

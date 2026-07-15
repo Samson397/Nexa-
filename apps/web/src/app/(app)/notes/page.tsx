@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Folder, Sparkles, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,10 +15,21 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { apiJson } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
+type NoteItem = {
+  id: string;
+  title: string;
+  folder: string;
+  tags: string[];
+  preview: string;
+  body: string;
+};
+
 const folders = ["All notes", "Strategy", "Meetings", "Personal"];
-const notes = [
+
+const MOCK_NOTES: NoteItem[] = [
   {
     id: "n1",
     title: "Helix renewal talking points",
@@ -45,17 +56,141 @@ const notes = [
   },
 ];
 
+function mapApiNote(raw: {
+  id: string;
+  title?: string;
+  plainText?: string;
+  tags?: string[];
+  folderId?: string | null;
+  content?: { text?: string };
+}): NoteItem {
+  const body =
+    raw.plainText ||
+    (typeof raw.content?.text === "string" ? raw.content.text : "") ||
+    "";
+  const tags = Array.isArray(raw.tags) ? raw.tags : [];
+  const folder =
+    tags.includes("meetings") || tags.includes("sales")
+      ? "Meetings"
+      : tags.includes("strategy") || tags.includes("automations")
+        ? "Strategy"
+        : tags.includes("personal") || tags.includes("focus")
+          ? "Personal"
+          : "All notes";
+  return {
+    id: raw.id,
+    title: raw.title || "Untitled",
+    folder: folder === "All notes" ? "Strategy" : folder,
+    tags,
+    preview: body.slice(0, 48) + (body.length > 48 ? "…" : ""),
+    body,
+  };
+}
+
 export default function NotesPage() {
   const [folder, setFolder] = useState("All notes");
-  const [activeId, setActiveId] = useState(notes[0].id);
-  const [body, setBody] = useState(notes[0].body);
+  const [notes, setNotes] = useState<NoteItem[]>(MOCK_NOTES);
+  const [activeId, setActiveId] = useState(MOCK_NOTES[0]!.id);
+  const [title, setTitle] = useState(MOCK_NOTES[0]!.title);
+  const [body, setBody] = useState(MOCK_NOTES[0]!.body);
   const [summary, setSummary] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [source, setSource] = useState<"api" | "mock">("mock");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiJson<{
+          items: Array<{
+            id: string;
+            title?: string;
+            plainText?: string;
+            tags?: string[];
+            folderId?: string | null;
+            content?: { text?: string };
+          }>;
+        }>("/api/notes");
+        if (cancelled || !data.items?.length) return;
+        const mapped = data.items.map(mapApiNote);
+        setNotes(mapped);
+        setActiveId(mapped[0]!.id);
+        setTitle(mapped[0]!.title);
+        setBody(mapped[0]!.body);
+        setSource("api");
+      } catch {
+        // keep mock notes
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered =
     folder === "All notes"
       ? notes
       : notes.filter((note) => note.folder === folder);
-  const active = notes.find((note) => note.id === activeId) ?? notes[0];
+  const active = notes.find((note) => note.id === activeId) ?? notes[0]!;
+
+  const saveNote = useCallback(async () => {
+    if (source !== "api") {
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === activeId
+            ? {
+                ...n,
+                title,
+                body,
+                preview: body.slice(0, 48) + (body.length > 48 ? "…" : ""),
+              }
+            : n,
+        ),
+      );
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiJson(`/api/notes/${activeId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title,
+          plainText: body,
+          content: { type: "doc", text: body },
+        }),
+      });
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === activeId
+            ? {
+                ...n,
+                title,
+                body,
+                preview: body.slice(0, 48) + (body.length > 48 ? "…" : ""),
+              }
+            : n,
+        ),
+      );
+    } catch {
+      // keep local edits
+    } finally {
+      setSaving(false);
+    }
+  }, [activeId, body, source, title]);
+
+  async function summarize() {
+    try {
+      const data = await apiJson<{ summary: string }>(
+        `/api/notes/${activeId}/summarize`,
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      setSummary(data.summary);
+    } catch {
+      setSummary(
+        "Summary: renewal negotiation focus — seat pricing, OEM risk, and legal follow-ups before Thursday call.",
+      );
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -107,6 +242,7 @@ export default function NotesPage() {
                     type="button"
                     onClick={() => {
                       setActiveId(note.id);
+                      setTitle(note.title);
                       setBody(note.body);
                       setSummary(null);
                     }}
@@ -133,7 +269,9 @@ export default function NotesPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-2">
                 <Input
-                  defaultValue={active.title}
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  onBlur={() => void saveNote()}
                   className="border-0 bg-transparent px-0 font-display text-xl font-semibold shadow-none focus-visible:ring-0"
                 />
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -145,18 +283,20 @@ export default function NotesPage() {
                   ))}
                 </div>
               </div>
-              <Button
-                variant="soft"
-                size="sm"
-                onClick={() =>
-                  setSummary(
-                    "Summary: renewal negotiation focus — seat pricing, OEM risk, and legal follow-ups before Thursday call.",
-                  )
-                }
-              >
-                <Sparkles />
-                AI summarize
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => void saveNote()}
+                >
+                  {saving ? "Saving…" : "Save"}
+                </Button>
+                <Button variant="soft" size="sm" onClick={() => void summarize()}>
+                  <Sparkles />
+                  AI summarize
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <Separator />
@@ -169,6 +309,7 @@ export default function NotesPage() {
             <Textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
+              onBlur={() => void saveNote()}
               className="min-h-[340px] resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
             />
           </CardContent>
