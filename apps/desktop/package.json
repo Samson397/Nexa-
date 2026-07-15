@@ -1,0 +1,21 @@
+{
+  "name": "@nexa/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NEXA AI OS — Desktop companion (Electron)",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "tsc && electron .",
+    "build": "tsc",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "electron": "^34.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "NEXA",
+    "slug": "nexa",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B1220"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.nexa.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "NEXA uses the camera when you capture photos or documents for knowledge and chat attachments.",
+        "NSMicrophoneUsageDescription": "NEXA uses the microphone when you record voice notes or speak to your AI assistant.",
+        "NSCalendarsUsageDescription": "NEXA reads and writes calendar events only when you connect calendar features or ask your assistant to schedule.",
+        "NSContactsUsageDescription": "NEXA accesses contacts only when you explicitly share or look up people for messaging and scheduling.",
+        "NSUserNotificationsUsageDescription": "NEXA sends notifications for task reminders, automation approvals, and assistant alerts you opt into."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B1220"
+      },
+      "package": "ai.nexa.mobile",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "READ_CONTACTS",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [],
+    "extra": {
+      "eas": {
+        "projectId": "nexa-mobile"
+      }
+    }
+  }
+}
